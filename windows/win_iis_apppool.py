@@ -38,15 +38,15 @@ options:
       - When C(present), creates the application pool.  When C(absent),
         removes the application pool if it exists.  When C(query),
         retrieves the application pool details without making any changes.
-	When C(started), if site exists and is stopped it will start app pool.
-	When C(stopped), if site exists and is started it will stop app pool.
+        When C(started), if site exists and is stopped it will start app pool.
+        When C(stopped), if site exists and is started it will stop app pool.
     required: false
     choices:
       - present
       - absent
       - query
-	  - started
-	  - stopped
+      - started
+      - stopped
     default: present
   autostart:
     required: false

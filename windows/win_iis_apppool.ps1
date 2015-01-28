@@ -115,13 +115,13 @@ If ($state -ne 'absent') {
 }
 
 try {
-    If ($webapppool_state_obj.GetType) {
-        Set-Attr $result "name" $name
-        Set-Attr $result "state" $webapppool_state_obj.value.ToLower()
-    }
-    ElseIf ($state -eq 'absent') {
+    If ($state -eq 'absent') {
         Set-Attr $result "name" $name
         Set-Attr $result "state" "absent"
+    }
+    ElseIf ($webapppool_state_obj.GetType) {
+        Set-Attr $result "name" $name
+        Set-Attr $result "state" $webapppool_state_obj.value.ToLower()
     }
     Else {
         Set-Attr $result "name" $name
