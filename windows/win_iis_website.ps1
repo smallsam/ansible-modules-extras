@@ -38,24 +38,40 @@ If (-not $params.name.GetType) {
 }
 
 $name = Get-Attr $params "name"
+$port = (Get-Attr $params "port") -as [INT]
+$ipaddress = Get-Attr $params "ipaddress" '*'
+$hostheader = Get-Attr $params "hostheader"
+$physical_path = Get-Attr $params "physical_path"
+$application_pool = Get-Attr $params "application_pool"
 
 If ($params.state) {
     $state = $params.state.ToString().ToLower()
-    If (($state -ne 'present') -and ($state -ne 'absent') -and ($state -ne 'query') -and ($state -ne 'started') -and ($state -ne 'stopped') -and ($state -ne 'restarted') -and ($state -ne 'disabled') -and ($state -ne 'enabled')) {
-        Fail-Json $result "state is '$state'; must be 'present', 'absent', 'query', 'started', 'stopped', 'restarted', 'enabled' or 'disabled'"
+    If (($state -ne 'present') -and ($state -ne 'absent') -and ($state -ne 'query') -and ($state -ne 'started') -and ($state -ne 'stopped') -and ($state -ne 'disabled') -and ($state -ne 'enabled')) {
+        Fail-Json $result "state is '$state'; must be 'present', 'absent' or 'query' or 'started' or 'stopped' or 'disabled' or 'enabled'"
     }
 }
 ElseIf (!$params.state) {
     $state = "present"
 }
 
-$webapppool_state_obj = Get-WebAppPoolState -Name $name
+$ssl_enabled = Get-Attr $params "ssl"
+If ($ssl_enabled -ne $null) {
+    $ssl_enabled = $ssl_enabled | ConvertTo-Bool
+}
+
+$autostart = Get-Attr $params "autostart" "yes"
+
+# Get-Website is broken on 2008
+
+
+$website_obj = Get-Item "IIS:\Sites\$name" -ErrorAction SilentlyContinue
+
 
 If ($state -eq 'present') {
-    # Add app pool
+    # Add website
     try {
-        If (!$webapppool_state_obj.GetType) {
-            New-WebAppPool -Name $name
+        If (!$website_obj.GetType) {
+            $website_obj = New-WebSite -Name $name -Port $port -IPAddress $ipaddress -HostHeader $hostheader -PhysicalPath $physical_path -Ssl:$ssl_enabled -ApplicationPool $application_pool
             $result.changed = $true
         }
     }
@@ -64,11 +80,12 @@ If ($state -eq 'present') {
     }
 }
 ElseIf ($state -eq 'absent') {
-    # Remove App Pool
+    # Remove website
     try {
-        If ($webapppool_state_obj.GetType) {
-            Remove-WebAppPool -Name $name
+        If ($website_obj.GetType) {
+            Remove-Website -Name $name
             $result.changed = $true
+            $website_obj = $null
         }
     }
     catch {
@@ -76,11 +93,11 @@ ElseIf ($state -eq 'absent') {
     }
 }
 ElseIf ($state -eq 'started') {
-    # Start App Pool
+    # Start website
     try {
-        If ($webapppool_state_obj.GetType) {
-            if ($webapppool_state_obj.State -ne "Started") {
-                Start-WebAppPool -Name $name
+        If ($website_obj.GetType) {
+            if ($website_obj.State -ne "Started") {
+                Start-Website -Name $name
                 $result.changed = $true
             }
             Else {
@@ -93,11 +110,11 @@ ElseIf ($state -eq 'started') {
     }
 }
 ElseIf ($state -eq 'stopped') {
-    # Stop App Pool
+    # Stop website
     try {
-        If ($webapppool_state_obj.GetType) {
-            If ($webapppool_state_obj.State -ne "Stopped") {
-                Stop-WebAppPool -Name $name
+        If ($website_obj.GetType) {
+            If ($website_obj.State -ne "Stopped") {
+                Stop-Website -Name $name
                 $result.changed = $true
             }
             Else {
@@ -109,24 +126,12 @@ ElseIf ($state -eq 'stopped') {
         Fail-Json $result $_.Exception.Message
     }
 }
-ElseIf ($state -eq 'restarted') {
-    # Recycle App Pool
-    try {
-        If ($webapppool_state_obj.GetType) {
-            Restart-WebAppPool -Name $name
-            $result.changed = $true
-        }
-    }
-    catch {
-        Fail-Json $result $_.Exception.Message
-    }
-}
 ElseIf ($state -eq 'disabled') {
-    # Disable App Pool
+    # Disable Web site
     try {
-        If ($webapppool_state_obj.GetType) {
-            If ((Get-ItemProperty "IIS:\AppPools\$name" autoStart).value) {
-                Set-ItemProperty "IIS:\AppPools\$name" autoStart $false
+        If ($website_obj.GetType) {
+            If ((Get-ItemProperty "IIS:\Sites\$name" serverAutoStart).value) {
+                Set-ItemProperty "IIS:\Sites\$name" serverAutoStart $false
                 $result.changed = $true
             }
             Else {
@@ -139,14 +144,14 @@ ElseIf ($state -eq 'disabled') {
     }
 }
 ElseIf ($state -eq 'enabled') {
-    # Enable App Pool
+    # Enable Web site
     try {
-        If ($webapppool_state_obj.GetType) {
-            If ((Get-ItemProperty "IIS:\AppPools\$name" autoStart).value) {
+        If ($website_obj.GetType) {
+            If ((Get-ItemProperty "IIS:\Sites\$name" serverAutoStart).value) {
                 $result.msg = 'Already Enabled'
             }
             Else {
-                Set-ItemProperty "IIS:\AppPools\$name" autoStart $true
+                Set-ItemProperty "IIS:\Sites\$name" serverAutoStart $true
                 $result.changed = $true
                 
             }
@@ -157,22 +162,18 @@ ElseIf ($state -eq 'enabled') {
     }
 }
 
-If ($state -ne 'absent') {
-    $webapppool_state_obj = Get-WebAppPoolState -Name $name
-}
+$website_obj = Get-Item "IIS:\Sites\$name" -ErrorAction SilentlyContinue
 
 try {
-    If ($state -eq 'absent') {
-        Set-Attr $result "name" $name
-        Set-Attr $result "state" "absent"
-    }
-    ElseIf ($webapppool_state_obj.GetType) {
-        Set-Attr $result "name" $name
-        Set-Attr $result "state" $webapppool_state_obj.value.ToLower()
+    If ($website_obj.GetType) {
+        Set-Attr $result "name" $website_obj.Name
+        Set-Attr $result "id" $website_obj.Id
+        Set-Attr $result "state" $website_obj.State.ToLower()
+        Set-Attr $result "physicalpath" $website_obj.PhysicalPath
     }
     Else {
         Set-Attr $result "name" $name
-        Set-Attr $result "msg" "App Pool '$name' was not found"
+        Set-Attr $result "msg" "Website '$name' was not found"
         Set-Attr $result "state" "absent"
     }
 }

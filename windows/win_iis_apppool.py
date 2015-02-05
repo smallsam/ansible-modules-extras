@@ -38,8 +38,11 @@ options:
       - When C(present), creates the application pool.  When C(absent),
         removes the application pool if it exists.  When C(query),
         retrieves the application pool details without making any changes.
-        When C(started), if site exists and is stopped it will start app pool.
-        When C(stopped), if site exists and is started it will stop app pool.
+        When C(started), if app pool exists and is stopped it will start it.
+        When C(stopped), if app pool exists and is started it will stop it.
+        When C(restarted), if app pool exists, it will recycle it
+        When C(enabled), if app pool exists, it will enable autoStart on it
+        When C(disabled), if app pool exists, it will disable autoStart on it
     required: false
     choices:
       - present
@@ -47,6 +50,9 @@ options:
       - query
       - started
       - stopped
+      - restarted
+      - disabled
+      - enabled
     default: present
   autostart:
     required: false
@@ -59,18 +65,6 @@ author: Sam Richards
 
 EXAMPLES = '''
 # Ad-hoc example
-$ ansible -i hosts -m win_user -a "name=bob password=Password12345 groups=Users" all
-$ ansible -i hosts -m win_user -a "name=bob state=absent" all
+$ ansible -i hosts -m win_iis_apppool -a "name=test state=restarted"
 
-# Playbook example
----
-- name: Add a user
-  hosts: all
-  gather_facts: false
-  tasks:
-    - name: Add User
-      win_user:
-        name: ansible
-        password: "@ns1bl3"
-        groups: ["Users"]
 '''
